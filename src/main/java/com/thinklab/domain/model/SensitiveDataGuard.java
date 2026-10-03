@@ -52,11 +52,27 @@ final class SensitiveDataGuard {
     private static boolean containsCardNumber(String value) {
         Matcher run = DIGIT_RUN.matcher(value);
         while (run.find()) {
-            if (passesLuhn(run.group().replaceAll("[ -]", ""))) {
+            String digits = run.group().replaceAll("[ -]", "");
+            if (hasCardPrefixAndLength(digits) && passesLuhn(digits)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Real card numbers have a length and a leading prefix per scheme; a bare Luhn check is not enough, because about one in ten
+     * arbitrary digit strings passes it - including 13-digit millisecond timestamps, which end up in resource ids (found in CI: a
+     * Postman resource id "asset-<epoch ms>" was rejected as a card number on one run in ten). 13 digits: Visa (4); 14: Diners
+     * (30, 36, 38); 15: Amex (34, 37); 16-19: any major scheme (2-6).
+     */
+    private static boolean hasCardPrefixAndLength(String digits) {
+        return switch (digits.length()) {
+            case 13 -> digits.startsWith("4");
+            case 14 -> digits.startsWith("30") || digits.startsWith("36") || digits.startsWith("38");
+            case 15 -> digits.startsWith("34") || digits.startsWith("37");
+            default -> digits.charAt(0) >= '2' && digits.charAt(0) <= '6';
+        };
     }
 
     private static boolean passesLuhn(String digits) {

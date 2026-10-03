@@ -53,5 +53,8 @@ of the operator (the chain supports verifying from a trusted checkpoint, see ADR
   it breaks correlation across the rotation. Key custody and rotation policy are the operator's responsibility; v1 has a single key.
 - Negative: the guard can reject a legitimate entry by a false positive (an identifier that happens to look like an email or pass
   the Luhn check). The writer's drop counter makes it visible; the alternative, accepting it, is worse.
+  (Found in CI: the first version checked only Luhn, and about one 13-digit number in ten passes it - including millisecond timestamps
+  used in resource ids - so a Postman run was rejected one time in ten. The rule now also requires a real scheme length and prefix; 16-19
+  digit identifiers starting 2-6 can still collide by chance, so numeric resource ids of that shape should not be used.)
 - Out of scope for v1: field-level encryption of the ledger at rest beyond what the database provides, a retention/archival job,
   and a documented key-escrow procedure.

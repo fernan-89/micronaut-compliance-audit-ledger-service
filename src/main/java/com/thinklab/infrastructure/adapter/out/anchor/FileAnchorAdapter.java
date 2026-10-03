@@ -20,7 +20,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 /**
  * Publishes anchors by appending one JSON line per anchor to {@code <directory>/<organisationId>.jsonl}, with the write forced to
@@ -55,15 +54,14 @@ public class FileAnchorAdapter implements AnchorPort {
             if (!Files.exists(file)) {
                 return Flux.<Anchor>empty();
             }
-            return Flux.using(() -> lines(file), Flux::fromStream, Stream::close)
-                    .filter(line -> !line.isBlank())
-                    .map(this::parse);
+            return Flux.fromIterable(readLines(file)).filter(line -> !line.isBlank()).map(this::parse);
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    private static Stream<String> lines(Path file) {
+    /** One call that fails the same way on every OS (Files.lines only fails on open on some platforms, later on others). */
+    private static java.util.List<String> readLines(Path file) {
         try {
-            return Files.lines(file, StandardCharsets.UTF_8);
+            return Files.readAllLines(file, StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException("Could not read the anchor store: " + e.getMessage(), e);
         }

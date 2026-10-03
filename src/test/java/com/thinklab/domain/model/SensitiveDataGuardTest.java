@@ -26,6 +26,14 @@ class SensitiveDataGuardTest {
         assertTrue(rejected("card 4111 1111 1111 1111 used").contains("payment card number"));
         assertTrue(rejected("card=4111-1111-1111-1111").contains("payment card number"));
         assertTrue(rejected("4111111111111111").contains("payment card number"));
+        assertTrue(rejected("Visa 13 digits 4222222222222").contains("payment card number"));
+        assertTrue(rejected("Diners 30569309025904").contains("payment card number"));
+        assertTrue(rejected("Amex 378282246310005").contains("payment card number"));
+        assertTrue(rejected("Amex 340000000000009").contains("payment card number"));
+        assertTrue(rejected("Diners 36227206271667").contains("payment card number"));
+        assertTrue(rejected("Diners 38520000023237").contains("payment card number"));
+        assertTrue(rejected("19 digits 6759649826438453003").contains("payment card number"));
+        assertTrue(rejected("Discover 6011000990139424").contains("payment card number"));
         assertTrue(rejected("tok eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.c2lnbmF0dXJl").contains("a token"));
         assertTrue(rejected("password=hunter2").contains("a credential"));
         assertTrue(rejected("Authorization: Bearer abc").contains("a credential"));
@@ -42,7 +50,11 @@ class SensitiveDataGuardTest {
     void acceptsOrdinaryContent() {
         for (String ok : new String[]{"PUT /it-asset-registry/v1/{id}/control/ready", UUID.randomUUID().toString(), "status=204", "order 12345",
                 "4111111111111112", "12 34 56", "id 1234567890123", "login:3f2a9c4e5b6d7a8f9e0d1c2b3a4f5e6d", "the token was refreshed",
-                "platform-gateway", ""}) {
+                "platform-gateway", "",
+                // Digit runs that pass the Luhn check by chance but cannot be card numbers: a millisecond timestamp (13 digits, not Visa),
+                // and numbers whose length/prefix match no scheme.
+                "asset-1791033795330", "epoch 1791033795330", "11111111111111", "199999999999999", "1000000000000008", "7000000000000004",
+                "9999999999999995"}) {
             assertDoesNotThrow(() -> SensitiveDataGuard.assertClean("Detail", ok), ok);
         }
         assertDoesNotThrow(() -> SensitiveDataGuard.assertClean("Detail", null));
