@@ -1,0 +1,940 @@
+{
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// Automatically generate standard W3C traceparent (ADR-010) and X-Trace-Id",
+          "function generateHex(len) {",
+          "    let result = '';",
+          "    const chars = '0123456789abcdef';",
+          "    for (let i = 0; i < len; i++) {",
+          "        result += chars.charAt(Math.floor(Math.random() * chars.length));",
+          "    }",
+          "    return result;",
+          "}",
+          "const traceId = generateHex(32);",
+          "const spanId = generateHex(16);",
+          "const traceparent = `00-${traceId}-${spanId}-01`;",
+          "pm.request.headers.upsert({ key: 'traceparent', value: traceparent });",
+          "pm.request.headers.upsert({ key: 'X-Trace-Id', value: traceId });",
+          "pm.environment.set('currentTraceId', traceId);"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ],
+  "info": {
+    "_exporter_id": "39879181",
+    "_postman_id": "b1c3d5e7-9f0a-4b2c-8d4e-6f8a0b2c4d6e",
+    "description": "Enterprise-grade E2E Postman Suite for the Compliance Audit Ledger Service Domain (BIAN-aligned, ADR-001/005/013/019/030/031/032). Appends entries under /compliance-audit-ledger/v1 and asserts the per-tenant hash chain (position 1 on the genesis hash, each later entry linked to the hash before it), tenant-scoped retrieval, filters and bounded paging, and the integrity-check/evaluate verdict; negative cases cover validation, tenant isolation and the absence of any update or delete (append-only), with RFC 7807 error_code assertions. It appends under its own generated tenant id (ledgerOrganisationId) because it asserts exact chain positions, so it needs no organisationId from the Party Reference Data Directory.",
+    "name": "Compliance Audit Ledger Service - Hash Chain Suite",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "item": [
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Health status is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "Health Check (Aggregated)",
+          "request": {
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ],
+              "raw": "{{base_url}}/health"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Liveness status is UP or UNKNOWN (no probe contributors registered)', () => pm.expect(['UP', 'UNKNOWN']).to.include(pm.response.json().status));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "Liveness Probe",
+          "request": {
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health",
+                "liveness"
+              ],
+              "raw": "{{base_url}}/health/liveness"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Readiness status is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "Readiness Probe",
+          "request": {
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health",
+                "readiness"
+              ],
+              "raw": "{{base_url}}/health/readiness"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Contains JVM metrics', () => pm.expect(pm.response.text()).to.include('jvm_memory'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "Prometheus Metrics",
+          "request": {
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "prometheus"
+              ],
+              "raw": "{{base_url}}/prometheus"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns Swagger UI HTML', () => pm.expect(pm.response.text()).to.include('swagger-ui'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "Swagger UI",
+          "request": {
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "swagger-ui",
+                "index.html"
+              ],
+              "raw": "{{base_url}}/swagger-ui/index.html"
+            }
+          }
+        }
+      ],
+      "name": "00. Infrastructure & Telemetry"
+    },
+    {
+      "item": [
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set('ledgerOrganisationId', pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.environment.set('resourceId', 'asset-' + Date.now());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201 Created', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('Position 1 on the genesis hash', () => {",
+                  "    pm.expect(json.sequence).to.eql(1);",
+                  "    pm.expect(json.previousHash).to.eql('0'.repeat(64));",
+                  "    pm.expect(json.hash).to.match(/^[0-9a-f]{64}$/);",
+                  "    pm.expect(json.recordedBy).to.eql(pm.environment.get('executor'));",
+                  "});",
+                  "pm.environment.set('firstEntryId', json.id);",
+                  "pm.environment.set('firstHash', json.hash);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "01. Initiate LedgerEntry (append, first of the chain)",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"postman-suite\",\n  \"actor\": \"alice\",\n  \"action\": \"PUT control/deploy\",\n  \"resourceType\": \"it-asset-registry\",\n  \"resourceId\": \"{{resourceId}}\",\n  \"detail\": \"status=204\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              },
+              {
+                "key": "X-Executor",
+                "value": "{{executor}}"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "initiate"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/initiate"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201 Created', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('Position 2, previousHash is the first entry hash, occurredAt kept to the millisecond', () => {",
+                  "    pm.expect(json.sequence).to.eql(2);",
+                  "    pm.expect(json.previousHash).to.eql(pm.environment.get('firstHash'));",
+                  "    pm.expect(json.occurredAt).to.eql('2026-01-15T10:30:00.123Z');",
+                  "});",
+                  "pm.environment.set('secondHash', json.hash);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "02. Initiate LedgerEntry (second entry links to the first by hash)",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"postman-suite\",\n  \"actor\": \"bob\",\n  \"action\": \"POST initiate\",\n  \"resourceType\": \"it-asset-registry\",\n  \"resourceId\": \"{{resourceId}}\",\n  \"occurredAt\": \"2026-01-15T10:30:00.123Z\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              },
+              {
+                "key": "X-Executor",
+                "value": "{{executor}}"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "initiate"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/initiate"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Same entry, same hash', () => { pm.expect(json.id).to.eql(pm.environment.get('firstEntryId')); pm.expect(json.hash).to.eql(pm.environment.get('firstHash')); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "03. Retrieve LedgerEntry By ID",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "{{firstEntryId}}",
+                "retrieve"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/{{firstEntryId}}/retrieve"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Newest first: position 2 before position 1', () => { pm.expect(json[0].sequence).to.eql(2); pm.expect(json[1].sequence).to.eql(1); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "04. Retrieve LedgerEntries (collection, newest first)",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "retrieve"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/retrieve"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Only alice\\'s entry', () => { pm.expect(json).to.have.lengthOf(1); pm.expect(json[0].actor).to.eql('alice'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "05. Retrieve LedgerEntries (filter actor=alice and resource)",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "retrieve"
+              ],
+              "query": [
+                {
+                  "key": "actor",
+                  "value": "alice"
+                },
+                {
+                  "key": "resourceType",
+                  "value": "it-asset-registry"
+                },
+                {
+                  "key": "resourceId",
+                  "value": "{{resourceId}}"
+                }
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/retrieve?actor=alice&resourceType=it-asset-registry&resourceId={{resourceId}}"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Bounded to one entry, the newest', () => { const json = pm.response.json(); pm.expect(json).to.have.lengthOf(1); pm.expect(json[0].sequence).to.eql(2); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "06. Retrieve LedgerEntries (limit=1)",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "retrieve"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1"
+                }
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/retrieve?limit=1"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Intact, with the head at the second entry', () => {",
+                  "    pm.expect(json.valid).to.be.true;",
+                  "    pm.expect(json.entriesChecked).to.eql(2);",
+                  "    pm.expect(json.headSequence).to.eql(2);",
+                  "    pm.expect(json.headHash).to.eql(pm.environment.get('secondHash'));",
+                  "    pm.expect(json.firstBrokenSequence == null).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "07. Evaluate chain integrity",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "integrity-check",
+                "evaluate"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/integrity-check/evaluate"
+            }
+          }
+        }
+      ],
+      "name": "01. Hash Chain & Retrieval (BIAN Behavior Qualifiers)"
+    },
+    {
+      "item": [
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test('RFC 7807 error_code is ERR-VALIDATION-00400', () => {",
+                  "    pm.expect(json.status).to.eql(400);",
+                  "    pm.expect(json.error_code).to.eql('ERR-VALIDATION-00400');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "01. Initiate - Missing action (400)",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"postman-suite\",\n  \"actor\": \"alice\",\n  \"resourceType\": \"it-asset-registry\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              },
+              {
+                "key": "X-Executor",
+                "value": "{{executor}}"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "initiate"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/initiate"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "02. Initiate - Missing X-Tenant-Id Header (400)",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"s\",\n  \"actor\": \"a\",\n  \"action\": \"x\",\n  \"resourceType\": \"t\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Executor",
+                "value": "{{executor}}"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "initiate"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/initiate"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "03. Initiate - Missing X-Executor Header (400)",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"s\",\n  \"actor\": \"a\",\n  \"action\": \"x\",\n  \"resourceType\": \"t\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "initiate"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/initiate"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test('RFC 7807 error_code is ERR-VALIDATION-00400', () => {",
+                  "    pm.expect(json.status).to.eql(400);",
+                  "    pm.expect(json.error_code).to.eql('ERR-VALIDATION-00400');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "04. Initiate - Dated in the future (400)",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"s\",\n  \"actor\": \"a\",\n  \"action\": \"x\",\n  \"resourceType\": \"t\",\n  \"occurredAt\": \"2999-01-01T00:00:00Z\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              },
+              {
+                "key": "X-Executor",
+                "value": "{{executor}}"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "initiate"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/initiate"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));",
+                  "const json = pm.response.json();",
+                  "pm.test('RFC 7807 error_code is ERR-LED-00404', () => {",
+                  "    pm.expect(json.status).to.eql(404);",
+                  "    pm.expect(json.error_code).to.eql('ERR-LED-00404');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "05. Retrieve - Non-existent UUID (404)",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "00000000-0000-0000-0000-000000000000",
+                "retrieve"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/00000000-0000-0000-0000-000000000000/retrieve"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "06. Retrieve - Malformed UUID Path (400)",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "not-a-uuid",
+                "retrieve"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/not-a-uuid/retrieve"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));",
+                  "const json = pm.response.json();",
+                  "pm.test('RFC 7807 error_code is ERR-LED-00404', () => {",
+                  "    pm.expect(json.status).to.eql(404);",
+                  "    pm.expect(json.error_code).to.eql('ERR-LED-00404');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "07. Retrieve - Another tenant's entry answers like a missing one (404)",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "00000000-0000-0000-0000-000000000001"
+              }
+            ],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "{{firstEntryId}}",
+                "retrieve"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/{{firstEntryId}}/retrieve"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Not allowed', () => pm.expect([404, 405]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "08. Update - There is no PUT: the ledger is append-only (404 or 405)",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actor\": \"mallory\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Executor",
+                "value": "{{executor}}"
+              }
+            ],
+            "method": "PUT",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "{{firstEntryId}}",
+                "update"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/{{firstEntryId}}/update"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Not allowed', () => pm.expect([404, 405]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "09. Delete - There is no DELETE: the ledger is append-only (404 or 405)",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "DELETE",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "{{firstEntryId}}"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/{{firstEntryId}}"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Valid, nothing checked, no head', () => { pm.expect(json.valid).to.be.true; pm.expect(json.entriesChecked).to.eql(0); pm.expect(json.headHash == null).to.be.true; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "10. Evaluate - A tenant with no entries is valid and empty",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "00000000-0000-0000-0000-000000000002"
+              }
+            ],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "integrity-check",
+                "evaluate"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/integrity-check/evaluate"
+            }
+          }
+        }
+      ],
+      "name": "02. Negative Tests & Append-Only Guarantees"
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8094"
+    }
+  ]
+}
