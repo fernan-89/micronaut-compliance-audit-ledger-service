@@ -531,6 +531,10 @@
               {
                 "key": "X-Tenant-Id",
                 "value": "{{ledgerOrganisationId}}"
+              },
+              {
+                "key": "X-Executor",
+                "value": "{{executor}}"
               }
             ],
             "method": "POST",
@@ -567,6 +571,10 @@
               {
                 "key": "X-Tenant-Id",
                 "value": "{{ledgerOrganisationId}}"
+              },
+              {
+                "key": "X-Executor",
+                "value": "{{executor}}"
               }
             ],
             "method": "POST",
