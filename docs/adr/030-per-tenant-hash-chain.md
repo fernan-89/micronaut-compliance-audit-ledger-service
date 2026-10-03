@@ -33,8 +33,8 @@ It does not ask for tamper-*proof* storage, which no application can promise.
 - Positive: altering any field of an entry, rewriting an entry (even recomputing its hash), or removing one
   breaks verification at a known position (ADR-031).
 - Positive: appends need no distributed lock; contention costs a retry, not a stall.
-- Negative: a writer with database access who rewrites the *entire* tail of a chain, recomputing every hash,
-  produces a chain that verifies. Defending against that needs the head hash anchored somewhere the writer
+- Negative (closed by ADR-034): a writer with database access who rewrites the *entire* tail of a chain, recomputing every hash,
+  produces a chain that verifies on its own - which is why the head is anchored outside the database. Defending against that needs the head hash anchored somewhere the writer
   cannot reach (a periodic export, a notary, a write-once store); `integrity-check/evaluate` returns the
   `headHash` precisely so an operator can do that. Not built in v1.
 - Negative: the chain serialises a tenant's appends at the database, so one tenant's sustained write rate is

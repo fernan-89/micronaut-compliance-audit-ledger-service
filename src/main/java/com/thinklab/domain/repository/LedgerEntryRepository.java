@@ -29,7 +29,15 @@ public interface LedgerEntryRepository {
     Flux<LedgerEntry> search(UUID organisationId, Filter filter, int limit);
 
     /** The whole chain of a tenant in ascending sequence order, for verification. */
-    Flux<LedgerEntry> streamChain(UUID organisationId);
+    default Flux<LedgerEntry> streamChain(UUID organisationId) {
+        return streamChainAfter(organisationId, 0);
+    }
+
+    /** The entries of a tenant's chain after {@code sequence}, ascending: verification from a trusted checkpoint (ADR-034). */
+    Flux<LedgerEntry> streamChainAfter(UUID organisationId, long sequence);
+
+    /** Every tenant that has at least one entry (the anchoring job walks these). */
+    Flux<UUID> findOrganisationIds();
 
     record Filter(String actor, String action, String resourceType, String resourceId, Instant from, Instant to) {}
 }

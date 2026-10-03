@@ -13,7 +13,9 @@ afterwards is detected and located (ADR-030, ADR-031). It is the platform's audi
   the loser retries against the new head.
 - **Tamper-evident, not tamper-proof.** Edit an entry, rewrite it, or delete one straight in the database and
   `integrity-check/evaluate` reports the first broken position. Someone who rewrites a chain's whole tail and recomputes
-  every hash produces a chain that verifies; anchor the returned `headHash` somewhere out of reach to close that (ADR-030).
+  every hash produces a chain that verifies on its own - which is why the head is **anchored outside the database** (ADR-034) and
+  verification checks the chain against those anchors. The guarantee is only as strong as where the anchors live: use a write-once
+  destination and keep the signing key out of the database.
 
 ## BIAN Behavior Qualifier Contract
 
@@ -27,6 +29,8 @@ afterwards is detected and located (ADR-030, ADR-031). It is the platform's audi
 | retrieve | `GET /compliance-audit-ledger/v1/{id}/retrieve` |
 | retrieve (collection) | `GET /compliance-audit-ledger/v1/retrieve?actor=&action=&resourceType=&resourceId=&from=&to=&limit=` |
 | integrity-check/evaluate | `GET /compliance-audit-ledger/v1/integrity-check/evaluate` |
+| anchor/initiate | `POST /compliance-audit-ledger/v1/anchor/initiate` |
+| anchor/retrieve | `GET /compliance-audit-ledger/v1/anchor/retrieve` |
 
 The collection answers newest first, always bounded (`limit` defaults to 100, at most 500). `from` is inclusive and
 `to` exclusive, on `occurredAt`.
@@ -44,6 +48,24 @@ curl http://localhost:8094/compliance-audit-ledger/v1/integrity-check/evaluate -
 # {"valid":true,"entriesChecked":42,"headSequence":42,"headHash":"..."}
 # {"valid":false,"entriesChecked":17,"headSequence":16,"headHash":"...","firstBrokenSequence":17,"reason":"..."}
 ```
+
+## Anchoring the chain head (ADR-034)
+
+The chain alone cannot catch someone who rewrites an entry and recomputes every hash after it. So the head of each tenant's chain is
+**anchored outside the database**: `(tenant, position, hash, time)` signed with HMAC-SHA256 under a key the database never holds,
+appended to a destination the ledger's database credentials cannot rewrite. `integrity-check/evaluate` then also requires the chain to
+agree with every anchor (`anchorsVerified`), which catches a rewritten tail, a truncated chain and an edited anchor store. A chain that
+fails verification is never anchored (`REFUSED`).
+
+| Setting | Env | Meaning |
+|---|---|---|
+| `ledger.anchor.enabled` | `LEDGER_ANCHOR_ENABLED` | off by default; `anchor/initiate` answers 503 when off |
+| `ledger.anchor.directory` | `LEDGER_ANCHOR_DIRECTORY` | where anchors are appended, one `<organisationId>.jsonl` per tenant; mount a **write-once** volume here |
+| `ledger.anchor.key` | `LEDGER_ANCHOR_KEY` | HMAC key (required when enabled); keep it in a secret store, never in the database |
+| `ledger.anchor.interval` | `LEDGER_ANCHOR_INTERVAL` | scheduled pass, default `1h` |
+
+The protection is only as good as the destination: a plain directory with the same credentials is tamper-*evident* (the HMAC), not
+write-once. The compose and local-stack defaults are for development only.
 
 ## Where entries come from
 
@@ -63,6 +85,7 @@ As defence in depth the ledger itself rejects (400, naming the field, never echo
 |---|---|---|
 | `ERR-LED-00404` | 404 | Entry not found (or belongs to another tenant) |
 | `ERR-LED-00409` | 409 | The chain position stayed contended after the bounded retries; safe to retry |
+| `ERR-LED-00503` | 503 | Anchoring is not configured on this deployment |
 | `ERR-VALIDATION-00400` | 400 | Payload/header/identifier validation failure, including an entry dated in the future or one containing an email, card number, token or credential (ADR-033) |
 | `ERR-INTERNAL-00500` | 500 | Unexpected technical failure |
 

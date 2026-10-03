@@ -1,14 +1,19 @@
 package com.thinklab.infrastructure.adapter.in.web;
 
 import com.thinklab.application.dto.request.AppendLedgerEntryRequest;
+import com.thinklab.application.dto.response.AnchorResponse;
+import com.thinklab.application.dto.response.AnchorResultResponse;
 import com.thinklab.application.dto.response.ChainIntegrityResponse;
 import com.thinklab.application.dto.response.LedgerEntryResponse;
+import com.thinklab.application.usecase.AnchorChainHeadsUseCase;
 import com.thinklab.application.usecase.AppendLedgerEntryUseCase;
 import com.thinklab.application.usecase.EvaluateChainIntegrityUseCase;
+import com.thinklab.application.usecase.RetrieveAnchorsUseCase;
 import com.thinklab.application.usecase.RetrieveLedgerEntriesUseCase;
 import com.thinklab.application.usecase.RetrieveLedgerEntryUseCase;
 import io.micronaut.core.annotation.Nullable;
 import io.micronaut.http.HttpResponse;
+import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
@@ -44,15 +49,21 @@ public class LedgerEntryController {
     private final RetrieveLedgerEntryUseCase retrieveLedgerEntryUseCase;
     private final RetrieveLedgerEntriesUseCase retrieveLedgerEntriesUseCase;
     private final EvaluateChainIntegrityUseCase evaluateChainIntegrityUseCase;
+    private final AnchorChainHeadsUseCase anchorChainHeadsUseCase;
+    private final RetrieveAnchorsUseCase retrieveAnchorsUseCase;
 
     public LedgerEntryController(AppendLedgerEntryUseCase appendLedgerEntryUseCase,
                                  RetrieveLedgerEntryUseCase retrieveLedgerEntryUseCase,
                                  RetrieveLedgerEntriesUseCase retrieveLedgerEntriesUseCase,
-                                 EvaluateChainIntegrityUseCase evaluateChainIntegrityUseCase) {
+                                 EvaluateChainIntegrityUseCase evaluateChainIntegrityUseCase,
+                                 AnchorChainHeadsUseCase anchorChainHeadsUseCase,
+                                 RetrieveAnchorsUseCase retrieveAnchorsUseCase) {
         this.appendLedgerEntryUseCase = appendLedgerEntryUseCase;
         this.retrieveLedgerEntryUseCase = retrieveLedgerEntryUseCase;
         this.retrieveLedgerEntriesUseCase = retrieveLedgerEntriesUseCase;
         this.evaluateChainIntegrityUseCase = evaluateChainIntegrityUseCase;
+        this.anchorChainHeadsUseCase = anchorChainHeadsUseCase;
+        this.retrieveAnchorsUseCase = retrieveAnchorsUseCase;
     }
 
     /** Behavior Qualifier: {@code initiate}. Appends one entry to the tenant's chain. */
@@ -92,5 +103,22 @@ public class LedgerEntryController {
     @Get("/integrity-check/evaluate")
     public Mono<ChainIntegrityResponse> evaluateIntegrity(@Header(TENANT_HEADER) @NotBlank String tenantId) {
         return Mono.defer(() -> evaluateChainIntegrityUseCase.execute(UUID.fromString(tenantId)));
+    }
+
+    /** Behavior Qualifier: {@code anchor/initiate}. Publishes the head of the tenant's chain outside the database (ADR-034): 201 when a new anchor was published, 200 when nothing is new or the chain was refused. */
+    @Post(value = "/anchor/initiate", consumes = MediaType.ALL)
+    public Mono<HttpResponse<AnchorResultResponse>> anchor(
+            @Header(TENANT_HEADER) @NotBlank String tenantId,
+            @Header(EXECUTOR_HEADER) @NotBlank String executor
+    ) {
+        log.info("[ACTION: ANCHOR_CHAIN_HEAD] [EXECUTOR: {}] organisation: {}", executor, tenantId);
+        return Mono.defer(() -> anchorChainHeadsUseCase.executeFor(UUID.fromString(tenantId)))
+                .map(result -> "PUBLISHED".equals(result.status()) ? HttpResponse.created(result) : HttpResponse.ok(result));
+    }
+
+    /** Behavior Qualifier: {@code anchor/retrieve}. The anchors published for the tenant, oldest first. */
+    @Get("/anchor/retrieve")
+    public Mono<List<AnchorResponse>> retrieveAnchors(@Header(TENANT_HEADER) @NotBlank String tenantId) {
+        return Mono.defer(() -> retrieveAnchorsUseCase.execute(UUID.fromString(tenantId)).collectList());
     }
 }

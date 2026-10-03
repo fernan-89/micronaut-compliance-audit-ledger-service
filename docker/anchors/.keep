@@ -1,0 +1,1 @@
+Placeholder so the image has /anchors owned by the non-root user: a named volume mounted there inherits that ownership.

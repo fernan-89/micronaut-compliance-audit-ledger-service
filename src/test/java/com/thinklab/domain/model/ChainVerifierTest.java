@@ -31,7 +31,7 @@ class ChainVerifierTest {
     }
 
     private static ChainVerification verify(List<LedgerEntry> entries) {
-        ChainVerifier verifier = new ChainVerifier();
+        ChainVerifier verifier = new ChainVerifier(List.of());
         entries.forEach(verifier::accept);
         return verifier.result();
     }

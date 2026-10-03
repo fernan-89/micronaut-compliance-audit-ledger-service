@@ -20,6 +20,6 @@ public final class LedgerEntryMapper {
 
     public static ChainIntegrityResponse toResponse(ChainVerification verification) {
         return new ChainIntegrityResponse(verification.valid(), verification.entriesChecked(), verification.headSequence(),
-                verification.headHash(), verification.firstBrokenSequence(), verification.reason());
+                verification.headHash(), verification.firstBrokenSequence(), verification.reason(), verification.anchorsVerified());
     }
 }

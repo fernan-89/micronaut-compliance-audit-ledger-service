@@ -5,6 +5,7 @@ import com.mongodb.MongoWriteException;
 import com.mongodb.ServerAddress;
 import com.mongodb.WriteError;
 import com.mongodb.client.result.InsertOneResult;
+import com.mongodb.reactivestreams.client.DistinctPublisher;
 import com.mongodb.reactivestreams.client.FindPublisher;
 import com.mongodb.reactivestreams.client.MongoClient;
 import com.mongodb.reactivestreams.client.MongoCollection;
@@ -185,6 +186,35 @@ class LedgerEntryMongoRepositoryAdapterTest {
         verify(mongoCollection).find(filter.capture());
         String rendered = render(filter.getValue()).toJson();
         assertTrue(rendered.contains("organisationId") && !rendered.contains("actor") && !rendered.contains("occurredAt"), rendered);
+    }
+
+    @Test
+    @DisplayName("streamChainAfter reads only entries after the checkpoint, ascending; streamChain is the same from the start")
+    void streamChainAfter() {
+        FindPublisher<LedgerEntryDocument> publisher = findReturning(Flux.just(LedgerPersistenceMapper.toDocument(entry)));
+
+        StepVerifier.create(adapter.streamChainAfter(organisationId, 5)).expectNextCount(1).verifyComplete();
+
+        ArgumentCaptor<Bson> filter = ArgumentCaptor.forClass(Bson.class);
+        verify(mongoCollection).find(filter.capture());
+        String rendered = render(filter.getValue()).toJson();
+        assertTrue(rendered.contains("$gt") && rendered.contains("5"), rendered);
+        verify(publisher).sort(any());
+    }
+
+    @Test
+    @DisplayName("findOrganisationIds lists the distinct tenants that have entries")
+    void findOrganisationIds() {
+        DistinctPublisher<UUID> distinct = mock(DistinctPublisher.class);
+        UUID other = UUID.randomUUID();
+        when(mongoCollection.distinct("organisationId", UUID.class)).thenReturn(distinct);
+        doAnswer(invocation -> {
+            org.reactivestreams.Subscriber<UUID> subscriber = invocation.getArgument(0);
+            Flux.just(organisationId, other).subscribe(subscriber);
+            return null;
+        }).when(distinct).subscribe(any());
+
+        StepVerifier.create(adapter.findOrganisationIds()).expectNext(organisationId, other).verifyComplete();
     }
 
     @Test

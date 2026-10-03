@@ -69,14 +69,26 @@ class LedgerPersistenceIT implements TestPropertyProvider {
         }
     }
 
+    private static final java.nio.file.Path ANCHORS = anchorDirectory();
+
+    private static java.nio.file.Path anchorDirectory() {
+        try {
+            return java.nio.file.Files.createTempDirectory("ledger-anchors-it");
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     @Override
     public Map<String, String> getProperties() {
-        return Map.of("mongodb.uri", MongoContainer.uri(DATABASE));
+        return Map.of("mongodb.uri", MongoContainer.uri(DATABASE), "ledger.anchor.enabled", "true",
+                "ledger.anchor.directory", ANCHORS.toString(), "ledger.anchor.key", "it-anchor-key");
     }
 
     @Inject LedgerEntryRepository repository;
     @Inject AppendLedgerEntryUseCase append;
     @Inject EvaluateChainIntegrityUseCase integrity;
+    @Inject com.thinklab.application.usecase.AnchorChainHeadsUseCase anchoring;
     @Inject MongoClient mongoClient;
 
     private LedgerEntryResponse appendOne(UUID organisation, String actor, String action, String resourceId) {
@@ -226,6 +238,112 @@ class LedgerPersistenceIT implements TestPropertyProvider {
         assertTrue(byId.isIntact());
         assertEquals(byId.getId(), latest.getId());
         assertEquals(null, repository.findLatest(UUID.randomUUID()).block());
+    }
+
+    // ------------------------------------------------------------ anchoring (ADR-034)
+
+    @Test
+    @DisplayName("an anchor is published outside the database, the chain verifies against it, and later anchors only verify what is new")
+    void anchoredChainVerifies() {
+        UUID org = UUID.randomUUID();
+        appendOne(org, "alice", "A", "r-1");
+        appendOne(org, "alice", "B", "r-2");
+
+        var first = anchoring.executeFor(org).block();
+        assertEquals("PUBLISHED", first.status());
+        assertEquals(2, first.anchor().headSequence());
+        assertEquals("UNCHANGED", anchoring.executeFor(org).block().status());
+        appendOne(org, "alice", "C", "r-3");
+        assertEquals(3, anchoring.executeFor(org).block().anchor().headSequence());
+
+        ChainIntegrityResponse verdict = verify(org);
+        assertTrue(verdict.valid(), String.valueOf(verdict.reason()));
+        assertEquals(2, verdict.anchorsVerified());
+        assertTrue(java.nio.file.Files.exists(ANCHORS.resolve(org + ".jsonl")));
+    }
+
+    @Test
+    @DisplayName("THE case the plain chain cannot catch: the tail is rewritten and every hash recomputed - internally consistent, but it disagrees with the anchor")
+    void rewrittenTailWithRecomputedHashesIsCaught() {
+        UUID org = UUID.randomUUID();
+        appendOne(org, "alice", "A", "r-1");
+        LedgerEntryResponse second = appendOne(org, "alice", "B", "r-2");
+        appendOne(org, "alice", "C", "r-3");
+        assertEquals("PUBLISHED", anchoring.executeFor(org).block().status());
+
+        // Forge entry 3 with a different actor, correctly chained to entry 2: the chain still verifies on its own.
+        LedgerEntry forged = LedgerEntry.createNew(UUID.randomUUID(), org, 3, Instant.now(), "platform-gateway", "mallory", "C", "it-asset-registry", "r-3",
+                "status=204", EXECUTOR, second.hash());
+        Flux.from(mongoClient.getDatabase(DATABASE).getCollection("ledger_entries")
+                .deleteOne(Filters.and(Filters.eq("organisationId", org), Filters.eq("sequence", 3L)))).blockLast();
+        repository.append(forged).block();
+
+        ChainIntegrityResponse verdict = verify(org);
+        assertFalse(verdict.valid());
+        assertEquals(3L, verdict.firstBrokenSequence());
+        assertTrue(verdict.reason().contains("anchored outside the database"), verdict.reason());
+    }
+
+    @Test
+    @DisplayName("entries removed after anchoring (truncation) are caught")
+    void truncationIsCaught() {
+        UUID org = UUID.randomUUID();
+        appendOne(org, "alice", "A", "r-1");
+        appendOne(org, "alice", "B", "r-2");
+        appendOne(org, "alice", "C", "r-3");
+        anchoring.executeFor(org).block();
+
+        Flux.from(mongoClient.getDatabase(DATABASE).getCollection("ledger_entries")
+                .deleteOne(Filters.and(Filters.eq("organisationId", org), Filters.eq("sequence", 3L)))).blockLast();
+
+        ChainIntegrityResponse verdict = verify(org);
+        assertFalse(verdict.valid());
+        assertTrue(verdict.reason().contains("entries were removed after anchoring"), verdict.reason());
+        assertEquals("REFUSED", anchoring.executeFor(org).block().status(), "a truncated chain must not be re-anchored as UNCHANGED");
+    }
+
+    @Test
+    @DisplayName("a tampered chain is never anchored: the attempt is refused and no anchor is written")
+    void tamperedChainIsNotAnchored() {
+        UUID org = UUID.randomUUID();
+        appendOne(org, "alice", "A", "r-1");
+        appendOne(org, "alice", "B", "r-2");
+        editInStore(org, 2, Updates.set("actor", "mallory"));
+
+        var result = anchoring.executeFor(org).block();
+
+        assertEquals("REFUSED", result.status());
+        assertFalse(java.nio.file.Files.exists(ANCHORS.resolve(org + ".jsonl")));
+    }
+
+    @Test
+    @DisplayName("an anchor line edited in the anchor store no longer authenticates and is reported as tampering")
+    void editedAnchorIsCaught() throws java.io.IOException {
+        UUID org = UUID.randomUUID();
+        appendOne(org, "alice", "A", "r-1");
+        anchoring.executeFor(org).block();
+        java.nio.file.Path file = ANCHORS.resolve(org + ".jsonl");
+        java.nio.file.Files.writeString(file, java.nio.file.Files.readString(file).replace("\"headSequence\":1", "\"headSequence\":2"));
+
+        ChainIntegrityResponse verdict = verify(org);
+
+        assertFalse(verdict.valid());
+        assertTrue(verdict.reason().contains("anchor store was tampered with"), verdict.reason());
+    }
+
+    @Test
+    @DisplayName("executeAll anchors every tenant that has entries")
+    void anchorsEveryTenant() {
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        appendOne(a, "alice", "A", "r-1");
+        appendOne(b, "bob", "A", "r-1");
+
+        var results = anchoring.executeAll().collectList().block();
+
+        assertTrue(results.stream().anyMatch(r -> r.status().equals("PUBLISHED")));
+        assertTrue(java.nio.file.Files.exists(ANCHORS.resolve(a + ".jsonl")));
+        assertTrue(java.nio.file.Files.exists(ANCHORS.resolve(b + ".jsonl")));
     }
 
     @Test

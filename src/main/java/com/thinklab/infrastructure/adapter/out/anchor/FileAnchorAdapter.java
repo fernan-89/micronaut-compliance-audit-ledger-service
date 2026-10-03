@@ -1,0 +1,102 @@
+package com.thinklab.infrastructure.adapter.out.anchor;
+
+import com.thinklab.domain.model.Anchor;
+import com.thinklab.domain.port.AnchorPort;
+import com.thinklab.infrastructure.config.AnchorProperties;
+import io.micronaut.context.annotation.Requires;
+import io.micronaut.core.annotation.Introspected;
+import io.micronaut.json.JsonMapper;
+import io.micronaut.serde.annotation.Serdeable;
+import jakarta.inject.Singleton;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import java.util.UUID;
+import java.util.stream.Stream;
+
+/**
+ * Publishes anchors by appending one JSON line per anchor to {@code <directory>/<organisationId>.jsonl}, with the write forced to
+ * disk. The directory is meant to be a write-once volume (or a mount of an object store with object lock): the file adapter is the
+ * simplest destination that satisfies "outside the ledger's database", and the HMAC on each line means an editable volume is still
+ * tamper-evident. Blocking file I/O runs on the bounded-elastic scheduler, off the event loop.
+ */
+@Singleton
+@Requires(property = "ledger.anchor.enabled", value = "true")
+public class FileAnchorAdapter implements AnchorPort {
+
+    private final Path directory;
+    private final JsonMapper json;
+
+    public FileAnchorAdapter(AnchorProperties properties, JsonMapper json) {
+        if (properties.getKey() == null || properties.getKey().isBlank()) {
+            throw new IllegalStateException("ledger.anchor.key is required when ledger.anchor.enabled is true: unsigned anchors prove nothing.");
+        }
+        this.directory = Path.of(properties.getDirectory());
+        this.json = json;
+    }
+
+    @Override
+    public Mono<Void> publish(Anchor anchor) {
+        return Mono.<Void>fromRunnable(() -> append(anchor)).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Flux<Anchor> read(UUID organisationId) {
+        return Flux.defer(() -> {
+            Path file = fileOf(organisationId);
+            if (!Files.exists(file)) {
+                return Flux.<Anchor>empty();
+            }
+            return Flux.using(() -> lines(file), Flux::fromStream, Stream::close)
+                    .filter(line -> !line.isBlank())
+                    .map(this::parse);
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private static Stream<String> lines(Path file) {
+        try {
+            return Files.lines(file, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not read the anchor store: " + e.getMessage(), e);
+        }
+    }
+
+    private void append(Anchor anchor) {
+        try {
+            Files.createDirectories(directory);
+            String line = json.writeValueAsString(new Line(anchor.organisationId().toString(), anchor.headSequence(), anchor.headHash(),
+                    anchor.anchoredAt().toString(), anchor.signature())) + System.lineSeparator();
+            Files.writeString(fileOf(anchor.organisationId()), line, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.SYNC);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not publish the anchor: " + e.getMessage(), e);
+        }
+    }
+
+    private Anchor parse(String text) {
+        try {
+            Line line = json.readValue(text, Line.class);
+            return new Anchor(UUID.fromString(line.organisationId()), line.headSequence(), line.headHash(), Instant.parse(line.anchoredAt()), line.signature());
+        } catch (IOException | RuntimeException e) {
+            throw new IllegalStateException("The anchor store holds a line that cannot be read: it was corrupted or tampered with.", e);
+        }
+    }
+
+    private Path fileOf(UUID organisationId) {
+        return directory.resolve(organisationId + ".jsonl");
+    }
+
+    /** The on-disk shape of an anchor, kept out of the domain. */
+    @Serdeable
+    @Introspected
+    record Line(String organisationId, long headSequence, String headHash, String anchoredAt, String signature) {
+    }
+}

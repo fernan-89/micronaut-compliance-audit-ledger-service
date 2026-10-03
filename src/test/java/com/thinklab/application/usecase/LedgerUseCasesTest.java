@@ -46,6 +46,7 @@ class LedgerUseCasesTest {
 
     @Mock private LedgerEntryRepository repository;
     @Mock private HashServicePort hashServicePort;
+    @Mock private com.thinklab.domain.port.AnchorPort anchorPort;
 
     private UUID organisationId;
     private UUID sovereignId;
@@ -235,12 +236,17 @@ class LedgerUseCasesTest {
 
     // ------------------------------------------------------------ integrity
 
+    @org.junit.jupiter.api.BeforeEach
+    void noAnchors() {
+        org.mockito.Mockito.lenient().when(anchorPort.read(any())).thenReturn(Flux.empty());
+    }
+
     @Test
     @DisplayName("Integrity: folds the streamed chain into a verdict - valid for an intact chain, broken for a tampered one")
     void integrity() {
         LedgerEntry one = head(1);
         LedgerEntry two = LedgerEntry.createNew(UUID.randomUUID(), organisationId, 2, Instant.now().minusSeconds(30), "gw", "bob", "B", "t", null, null, "gw", one.getHash());
-        EvaluateChainIntegrityUseCase useCase = new EvaluateChainIntegrityUseCase(repository);
+        EvaluateChainIntegrityUseCase useCase = new EvaluateChainIntegrityUseCase(repository, anchorPort, new com.thinklab.domain.model.AnchorSigner(""));
 
         when(repository.streamChain(organisationId)).thenReturn(Flux.just(one, two));
         StepVerifier.create(useCase.execute(organisationId)).assertNext(r -> {
@@ -260,7 +266,7 @@ class LedgerUseCasesTest {
     @Test
     @DisplayName("Integrity: every subscription gets its own verifier (no state leaks between calls)")
     void integrityIsRepeatable() {
-        EvaluateChainIntegrityUseCase useCase = new EvaluateChainIntegrityUseCase(repository);
+        EvaluateChainIntegrityUseCase useCase = new EvaluateChainIntegrityUseCase(repository, anchorPort, new com.thinklab.domain.model.AnchorSigner(""));
         when(repository.streamChain(organisationId)).thenReturn(Flux.just(head(1)));
         Mono<?> verdict = useCase.execute(organisationId);
 

@@ -104,8 +104,14 @@ public class LedgerEntryMongoRepositoryAdapter implements LedgerEntryRepository 
     }
 
     @Override
-    public Flux<LedgerEntry> streamChain(UUID organisationId) {
-        return Flux.from(getCollection().find(Filters.eq(FIELD_ORGANISATION, organisationId)).sort(Sorts.ascending(FIELD_SEQUENCE)))
+    public Flux<LedgerEntry> streamChainAfter(UUID organisationId, long sequence) {
+        return Flux.from(getCollection().find(Filters.and(Filters.eq(FIELD_ORGANISATION, organisationId), Filters.gt(FIELD_SEQUENCE, sequence)))
+                        .sort(Sorts.ascending(FIELD_SEQUENCE)))
                 .map(LedgerPersistenceMapper::toDomain);
+    }
+
+    @Override
+    public Flux<UUID> findOrganisationIds() {
+        return Flux.from(getCollection().distinct(FIELD_ORGANISATION, UUID.class));
     }
 }

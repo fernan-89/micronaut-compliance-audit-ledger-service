@@ -21,6 +21,10 @@ LABEL git-repo="https://github.com/fernan-89/micronaut-compliance-audit-ledger-s
 
 WORKDIR /app
 
+# Chain-head anchors (ADR-034) are appended here. Mount a write-once volume at /anchors; the directory is created owned by the
+# non-root user so a fresh named volume mounted over it is writable (distroless has no shell to chown at run time).
+COPY --chown=nonroot:nonroot docker/anchors/.keep /anchors/.keep
+
 # Application JAR plus every runtime dependency, flat on the classpath.
 COPY --chown=nonroot:nonroot build/install/*/lib/*.jar /app/
 

@@ -10,5 +10,6 @@ public record ChainIntegrityResponse(
         long headSequence,
         String headHash,
         Long firstBrokenSequence,
-        String reason
+        String reason,
+        long anchorsVerified
 ) {}

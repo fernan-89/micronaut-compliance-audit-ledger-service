@@ -65,6 +65,12 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("AnchoringNotConfiguredException maps to 503 with ERR-LED-00503")
+    void anchoringNotConfigured() {
+        assertProblem(exceptionHandler.handle(request, new com.thinklab.domain.exception.AnchoringNotConfiguredException()), HttpStatus.SERVICE_UNAVAILABLE, "ERR-LED-00503");
+    }
+
+    @Test
     @DisplayName("ChainConflictException maps to 409 Conflict with ERR-LED-00409")
     void chainConflictIs409() {
         Map<String, Object> body = assertProblem(exceptionHandler.handle(request, new ChainConflictException("position taken")),

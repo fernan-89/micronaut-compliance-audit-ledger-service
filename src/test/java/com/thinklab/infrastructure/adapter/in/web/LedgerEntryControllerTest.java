@@ -34,6 +34,8 @@ class LedgerEntryControllerTest {
     @Mock private RetrieveLedgerEntryUseCase retrieveOne;
     @Mock private RetrieveLedgerEntriesUseCase retrieveAll;
     @Mock private EvaluateChainIntegrityUseCase evaluate;
+    @Mock private com.thinklab.application.usecase.AnchorChainHeadsUseCase anchorHeads;
+    @Mock private com.thinklab.application.usecase.RetrieveAnchorsUseCase retrieveAnchors;
     @InjectMocks private LedgerEntryController controller;
 
     private final UUID org = UUID.randomUUID();
@@ -94,9 +96,35 @@ class LedgerEntryControllerTest {
     }
 
     @Test
+    @DisplayName("anchor/initiate answers 201 when a new anchor was published and 200 when nothing is new or the chain was refused")
+    void anchorInitiate() {
+        com.thinklab.application.dto.response.AnchorResponse anchor = new com.thinklab.application.dto.response.AnchorResponse(3, "h", Instant.now());
+        when(anchorHeads.executeFor(org)).thenReturn(Mono.just(new com.thinklab.application.dto.response.AnchorResultResponse("PUBLISHED", anchor, null)))
+                .thenReturn(Mono.just(new com.thinklab.application.dto.response.AnchorResultResponse("UNCHANGED", anchor, null)))
+                .thenReturn(Mono.just(new com.thinklab.application.dto.response.AnchorResultResponse("REFUSED", null, "broken")));
+
+        StepVerifier.create(controller.anchor(org.toString(), "ops")).assertNext(http -> assertEquals(HttpStatus.CREATED, http.getStatus())).verifyComplete();
+        StepVerifier.create(controller.anchor(org.toString(), "ops")).assertNext(http -> assertEquals(HttpStatus.OK, http.getStatus())).verifyComplete();
+        StepVerifier.create(controller.anchor(org.toString(), "ops")).assertNext(http -> {
+            assertEquals(HttpStatus.OK, http.getStatus());
+            assertEquals("REFUSED", http.body().status());
+        }).verifyComplete();
+        StepVerifier.create(controller.anchor("not-a-uuid", "ops")).expectError(IllegalArgumentException.class).verify();
+    }
+
+    @Test
+    @DisplayName("anchor/retrieve lists the tenant's anchors")
+    void anchorRetrieve() {
+        when(retrieveAnchors.execute(org)).thenReturn(Flux.just(new com.thinklab.application.dto.response.AnchorResponse(3, "h", Instant.now())));
+
+        StepVerifier.create(controller.retrieveAnchors(org.toString())).assertNext(list -> assertEquals(1, list.size())).verifyComplete();
+        StepVerifier.create(controller.retrieveAnchors("not-a-uuid")).expectError(IllegalArgumentException.class).verify();
+    }
+
+    @Test
     @DisplayName("evaluateIntegrity returns the verdict for the caller's tenant")
     void evaluateIntegrity() {
-        ChainIntegrityResponse verdict = new ChainIntegrityResponse(true, 3, 3, "h", null, null);
+        ChainIntegrityResponse verdict = new ChainIntegrityResponse(true, 3, 3, "h", null, null, 0);
         when(evaluate.execute(org)).thenReturn(Mono.just(verdict));
 
         StepVerifier.create(controller.evaluateIntegrity(org.toString())).expectNext(verdict).verifyComplete();
