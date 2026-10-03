@@ -179,3 +179,29 @@ thinklab:
   events:
     enabled: ${THINKLAB_EVENTS_ENABLED:false}
     nats-url: ${THINKLAB_EVENTS_NATS_URL:`nats://localhost:4222`}
+
+# ----------------------------------------------------------------------------------------------
+# Anchoring the chain head outside the database (ADR-034, ADR-035). Off by default. The environment variable names are listed here so
+# every option is visible and does not depend on how an environment name is mapped to a property.
+# ----------------------------------------------------------------------------------------------
+ledger:
+  anchor:
+    enabled: ${LEDGER_ANCHOR_ENABLED:false}
+    # file: an append-only file per tenant (mount a write-once volume at `directory`); s3: an S3-compatible bucket with Object Lock.
+    sink: ${LEDGER_ANCHOR_SINK:file}
+    directory: ${LEDGER_ANCHOR_DIRECTORY:./anchors}
+    # HMAC key the anchors are signed with: never in the database. key-id names it; retired keys only verify (comma separated
+    # id=key pairs, e.g. k1=old-key,k0=older-key; keys must not contain commas). See docs/runbook-anchor-key-rotation.md.
+    key: ${LEDGER_ANCHOR_KEY:}
+    key-id: ${LEDGER_ANCHOR_KEY_ID:k1}
+    previous-keys-list: ${LEDGER_ANCHOR_PREVIOUS_KEYS:}
+    s3:
+      endpoint: ${LEDGER_ANCHOR_S3_ENDPOINT:}
+      region: ${LEDGER_ANCHOR_S3_REGION:us-east-1}
+      bucket: ${LEDGER_ANCHOR_S3_BUCKET:}
+      prefix: ${LEDGER_ANCHOR_S3_PREFIX:anchors/}
+      path-style: ${LEDGER_ANCHOR_S3_PATH_STYLE:false}
+      access-key: ${LEDGER_ANCHOR_S3_ACCESS_KEY:}
+      secret-key: ${LEDGER_ANCHOR_S3_SECRET_KEY:}
+      retention-days: ${LEDGER_ANCHOR_S3_RETENTION_DAYS:3650}
+      mode: ${LEDGER_ANCHOR_S3_MODE:COMPLIANCE}

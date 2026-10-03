@@ -49,7 +49,7 @@ curl http://localhost:8094/compliance-audit-ledger/v1/integrity-check/evaluate -
 # {"valid":false,"entriesChecked":17,"headSequence":16,"headHash":"...","firstBrokenSequence":17,"reason":"..."}
 ```
 
-## Anchoring the chain head (ADR-034)
+## Anchoring the chain head (ADR-034, ADR-035)
 
 The chain alone cannot catch someone who rewrites an entry and recomputes every hash after it. So the head of each tenant's chain is
 **anchored outside the database**: `(tenant, position, hash, time)` signed with HMAC-SHA256 under a key the database never holds,
@@ -62,6 +62,9 @@ fails verification is never anchored (`REFUSED`).
 | `ledger.anchor.enabled` | `LEDGER_ANCHOR_ENABLED` | off by default; `anchor/initiate` answers 503 when off |
 | `ledger.anchor.directory` | `LEDGER_ANCHOR_DIRECTORY` | where anchors are appended, one `<organisationId>.jsonl` per tenant; mount a **write-once** volume here |
 | `ledger.anchor.key` | `LEDGER_ANCHOR_KEY` | HMAC key (required when enabled); keep it in a secret store, never in the database |
+| `ledger.anchor.sink` | `LEDGER_ANCHOR_SINK` | `file` (default) or `s3`: an S3-compatible bucket with **Object Lock**, where an anchor cannot be overwritten or deleted until its retention ends (ADR-035) |
+| `ledger.anchor.s3.*` | `LEDGER_ANCHOR_S3_ENDPOINT`, `_REGION`, `_BUCKET`, `_PREFIX`, `_PATH_STYLE`, `_ACCESS_KEY`, `_SECRET_KEY`, `_RETENTION_DAYS` (3650), `_MODE` (`COMPLIANCE`) | the bucket must be created WITH Object Lock; blank keys use the standard AWS credential chain |
+| `ledger.anchor.key-id`, `previous-keys-list` | `LEDGER_ANCHOR_KEY_ID` (`k1`), `LEDGER_ANCHOR_PREVIOUS_KEYS` (`id=key,...`) | name of the current key and the retired keys that only verify: rotation without losing history (`docs/runbook-anchor-key-rotation.md`) |
 | `ledger.anchor.interval` | `LEDGER_ANCHOR_INTERVAL` | scheduled pass, default `1h` |
 
 The protection is only as good as the destination: a plain directory with the same credentials is tamper-*evident* (the HMAC), not

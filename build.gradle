@@ -114,6 +114,19 @@ dependencies {
 
     // ------------------------------------------------------------------------------------------
     // /**
+    //  * @layer       Anchor destination: an S3-compatible object store with Object Lock (ADR-035)
+    //  *
+    //  * The default HTTP clients (apache, netty) are excluded: the URL-connection client is all a handful of calls an hour needs.
+    // ------------------------------------------------------------------------------------------
+    implementation platform('software.amazon.awssdk:bom:2.29.52')
+    implementation('software.amazon.awssdk:s3') {
+        exclude group: 'software.amazon.awssdk', module: 'apache-client'
+        exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+    }
+    implementation         'software.amazon.awssdk:url-connection-client'
+
+    // ------------------------------------------------------------------------------------------
+    // /**
     //  * @layer       Quality Assurance, Isolation & Test Harnesses
     //  */
     // ------------------------------------------------------------------------------------------
@@ -147,6 +160,12 @@ testing {
                 implementation 'org.mongodb:mongodb-driver-reactivestreams'
                 implementation 'io.projectreactor:reactor-core'
                 implementation 'io.nats:jnats:2.26.3'
+                implementation platform('software.amazon.awssdk:bom:2.29.52')
+                implementation('software.amazon.awssdk:s3') {
+                    exclude group: 'software.amazon.awssdk', module: 'apache-client'
+                    exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+                }
+                implementation 'software.amazon.awssdk:url-connection-client'
 
             }
             targets.configureEach {

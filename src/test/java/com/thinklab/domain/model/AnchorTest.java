@@ -69,7 +69,7 @@ class AnchorTest {
     @Test
     @DisplayName("the HMAC failure path is an IllegalStateException")
     void macFailure() {
-        assertThrows(IllegalStateException.class, () -> AnchorSigner.mac("NOT-AN-ALGORITHM", "k", ORG, 1, "h", WHEN));
+        assertThrows(IllegalStateException.class, () -> AnchorSigner.mac("NOT-AN-ALGORITHM", "k", "canonical"));
     }
 
     // ------------------------------------------------------------ verifier with anchors

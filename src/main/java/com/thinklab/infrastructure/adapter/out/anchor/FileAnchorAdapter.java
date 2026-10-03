@@ -4,9 +4,7 @@ import com.thinklab.domain.model.Anchor;
 import com.thinklab.domain.port.AnchorPort;
 import com.thinklab.infrastructure.config.AnchorProperties;
 import io.micronaut.context.annotation.Requires;
-import io.micronaut.core.annotation.Introspected;
 import io.micronaut.json.JsonMapper;
-import io.micronaut.serde.annotation.Serdeable;
 import jakarta.inject.Singleton;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -18,7 +16,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -29,6 +26,7 @@ import java.util.UUID;
  */
 @Singleton
 @Requires(property = "ledger.anchor.enabled", value = "true")
+@Requires(property = "ledger.anchor.sink", notEquals = "s3")
 public class FileAnchorAdapter implements AnchorPort {
 
     private final Path directory;
@@ -70,8 +68,7 @@ public class FileAnchorAdapter implements AnchorPort {
     private void append(Anchor anchor) {
         try {
             Files.createDirectories(directory);
-            String line = json.writeValueAsString(new Line(anchor.organisationId().toString(), anchor.headSequence(), anchor.headHash(),
-                    anchor.anchoredAt().toString(), anchor.signature())) + System.lineSeparator();
+            String line = json.writeValueAsString(AnchorLine.of(anchor)) + System.lineSeparator();
             Files.writeString(fileOf(anchor.organisationId()), line, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.SYNC);
         } catch (IOException e) {
@@ -81,8 +78,7 @@ public class FileAnchorAdapter implements AnchorPort {
 
     private Anchor parse(String text) {
         try {
-            Line line = json.readValue(text, Line.class);
-            return new Anchor(UUID.fromString(line.organisationId()), line.headSequence(), line.headHash(), Instant.parse(line.anchoredAt()), line.signature());
+            return json.readValue(text, AnchorLine.class).toAnchor();
         } catch (IOException | RuntimeException e) {
             throw new IllegalStateException("The anchor store holds a line that cannot be read: it was corrupted or tampered with.", e);
         }
@@ -90,11 +86,5 @@ public class FileAnchorAdapter implements AnchorPort {
 
     private Path fileOf(UUID organisationId) {
         return directory.resolve(organisationId + ".jsonl");
-    }
-
-    /** The on-disk shape of an anchor, kept out of the domain. */
-    @Serdeable
-    @Introspected
-    record Line(String organisationId, long headSequence, String headHash, String anchoredAt, String signature) {
     }
 }
