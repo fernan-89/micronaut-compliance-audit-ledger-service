@@ -506,6 +506,120 @@
               "raw": "{{base_url}}/compliance-audit-ledger/v1/integrity-check/evaluate"
             }
           }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201 Created', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('PUBLISHED and anchored at the head', () => {",
+                  "    pm.expect(json.status).to.eql('PUBLISHED');",
+                  "    pm.expect(json.anchor.headSequence).to.eql(2);",
+                  "    pm.expect(json.anchor.headHash).to.eql(pm.environment.get('secondHash'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "08. Anchor the chain head (published outside the database)",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "anchor",
+                "initiate"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/anchor/initiate"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('UNCHANGED', () => pm.expect(pm.response.json().status).to.eql('UNCHANGED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "09. Anchor again with nothing new (200 UNCHANGED)",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "anchor",
+                "initiate"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/anchor/initiate"
+            }
+          }
+        },
+        {
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('One anchor, at the head', () => { pm.expect(json).to.have.lengthOf(1); pm.expect(json[0].headSequence).to.eql(2); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "name": "10. Retrieve anchors, and the chain now verifies against one",
+          "request": {
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{ledgerOrganisationId}}"
+              }
+            ],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-audit-ledger",
+                "v1",
+                "anchor",
+                "retrieve"
+              ],
+              "raw": "{{base_url}}/compliance-audit-ledger/v1/anchor/retrieve"
+            }
+          }
         }
       ],
       "name": "01. Hash Chain & Retrieval (BIAN Behavior Qualifiers)"
