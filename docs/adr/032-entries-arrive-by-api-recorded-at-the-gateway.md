@@ -12,11 +12,13 @@ mutation passes through: the gateway.
 - The ledger itself is source-agnostic: `POST /initiate` with `source`, `actor`, `action`, `resourceType`,
   optional `resourceId`, `detail` and `occurredAt` (never more than a few minutes in the future). A future
   collector, a service with its own business-level events, or a human can append the same way.
-- `platform-gateway-service` is the first writer (its ADR on audit recording): after forwarding a `POST`,
+- `platform-gateway-service` is the first writer (ADR-023 of the gateway): after forwarding a `POST`,
   `PUT`, `PATCH` or `DELETE` that carries a tenant it appends one entry - who (executor), what (method and
   path with identifiers masked), which resource, the HTTP status. It is **off by default**
   (`gateway.audit.enabled`), asynchronous and **fail-open**: a slow or unavailable ledger never delays or fails
-  the request it describes.
+  the request it describes. Appends are queued and sent one at a time, in the order the requests completed: a ledger position is
+  assigned on arrival, so parallel sends could let a later request overtake an earlier one (found live: an `initiate` landed at
+  position 4 of 4).
 - `X-Executor` on the append names the writer (`platform-gateway`), `actor` names who acted; both are stored
   and hashed.
 

@@ -24,6 +24,8 @@ It does not ask for tamper-*proof* storage, which no application can promise.
   translated to `ChainConflictException`, re-reads the new head and tries again (8 attempts, one Sovereign ID
   for all of them). Persistent contention surfaces as `409 ERR-LED-00409`, which is safe to retry.
   There is no lock and no coordinator, so a fork is impossible by construction, not by convention.
+- A position is assigned when an entry **arrives**, so the chain reads in order of recording; `occurredAt` says when it
+  actually happened. A writer that cares about order (the gateway does) must send its entries one at a time.
 - The repository port has **no update and no delete**, and the controller has no `PUT`/`DELETE`.
   Corrections are new entries.
 
