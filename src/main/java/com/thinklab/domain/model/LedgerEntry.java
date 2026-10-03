@@ -86,6 +86,13 @@ public final class LedgerEntry {
         requireText(recordedBy, "Executor");
         requireMax(resourceId, "Resource id", MAX_FIELD_LENGTH);
         requireMax(detail, "Detail", MAX_DETAIL_LENGTH);
+        SensitiveDataGuard.assertClean("Source", source);
+        SensitiveDataGuard.assertClean("Actor", actor);
+        SensitiveDataGuard.assertClean("Action", action);
+        SensitiveDataGuard.assertClean("Resource type", resourceType);
+        SensitiveDataGuard.assertClean("Resource id", resourceId);
+        SensitiveDataGuard.assertClean("Detail", detail);
+        SensitiveDataGuard.assertClean("Executor", recordedBy);
         if (previousHash == null || previousHash.length() != 64) {
             throw new IllegalArgumentException("previousHash must be a 64-character hex digest (use GENESIS_HASH for the first entry).");
         }

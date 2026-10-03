@@ -51,13 +51,19 @@ Anything can append. The platform gateway records every mutating request that ca
 `gateway.audit.enabled=true` (asynchronous and fail-open, ADR-032). That is API-call audit: it records that a call
 was made and how it ended, not a before/after of the data.
 
+## Data protection
+
+The ledger is immutable, so what enters it has to be right at the door (ADR-033). It records facts about actions - tenant, an opaque actor, the masked call, the resource id, the outcome - and **never** credentials, tokens, request or response bodies, query strings, card numbers or contact data. People appear only as keyed pseudonyms (HMAC-SHA256, e.g. `login:3f2a...`): the same person always maps to the same value, but it cannot be reversed or dictionary-attacked without the key, and destroying the key is how an erasure request (LGPD / GDPR) is honoured without rewriting a hash chain.
+
+As defence in depth the ledger itself rejects (400, naming the field, never echoing the value) any text field that contains an email address, a Luhn-valid card number, a JWT, or a `password`/`secret`/`token`/`authorization`/`api-key` assignment. This is a set of technical safeguards that help a PCI DSS / LGPD / HIPAA programme; it is not a certification, and it cannot recognise a person's name or a clinical record - writers must send opaque identifiers for those.
+
 ## Error catalog
 
 | Code | HTTP | Meaning |
 |---|---|---|
 | `ERR-LED-00404` | 404 | Entry not found (or belongs to another tenant) |
 | `ERR-LED-00409` | 409 | The chain position stayed contended after the bounded retries; safe to retry |
-| `ERR-VALIDATION-00400` | 400 | Payload/header/identifier validation failure, including an entry dated in the future |
+| `ERR-VALIDATION-00400` | 400 | Payload/header/identifier validation failure, including an entry dated in the future or one containing an email, card number, token or credential (ADR-033) |
 | `ERR-INTERNAL-00500` | 500 | Unexpected technical failure |
 
 ## Build and test
