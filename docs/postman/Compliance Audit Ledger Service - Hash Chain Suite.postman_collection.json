@@ -513,13 +513,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status is 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Published now (201), or already published by the hourly scheduler (200)', () => pm.expect([200, 201]).to.include(pm.response.code));",
                   "const json = pm.response.json();",
-                  "pm.test('PUBLISHED and anchored at the head', () => {",
-                  "    pm.expect(json.status).to.eql('PUBLISHED');",
-                  "    pm.expect(json.anchor.headSequence).to.eql(2);",
-                  "    pm.expect(json.anchor.headHash).to.eql(pm.environment.get('secondHash'));",
-                  "});"
+                  "pm.test('PUBLISHED or UNCHANGED, never REFUSED', () => pm.expect(['PUBLISHED', 'UNCHANGED']).to.include(json.status));",
+                  "if (json.status === 'PUBLISHED') pm.test('Anchored at the head', () => { pm.expect(json.anchor.headSequence).to.eql(2); pm.expect(json.anchor.headHash).to.eql(pm.environment.get('secondHash')); });"
                 ],
                 "type": "text/javascript"
               }
@@ -600,7 +597,7 @@
                 "exec": [
                   "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
                   "const json = pm.response.json();",
-                  "pm.test('One anchor, at the head', () => { pm.expect(json).to.have.lengthOf(1); pm.expect(json[0].headSequence).to.eql(2); });"
+                  "pm.test('At least one anchor, the newest at the head (the hourly scheduler may have published an earlier one)', () => { pm.expect(json.length).to.be.at.least(1); pm.expect(json[json.length - 1].headSequence).to.eql(2); });"
                 ],
                 "type": "text/javascript"
               }
