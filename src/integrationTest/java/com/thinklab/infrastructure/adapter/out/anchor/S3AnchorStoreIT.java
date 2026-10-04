@@ -17,7 +17,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
-import software.amazon.awssdk.services.s3.model.ObjectLockMode;
+import software.amazon.awssdk.services.s3.model.ObjectLockRetentionMode;
 import software.amazon.awssdk.services.s3.model.ObjectVersion;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
@@ -101,7 +101,7 @@ class S3AnchorStoreIT implements TestPropertyProvider {
         assertEquals("k1", read.get(0).keyId());
         assertTrue(anchors.read(UUID.randomUUID()).collectList().block().isEmpty());
         var retention = s3.getObjectRetention(request -> request.bucket(BUCKET).key(versionsOf(org).get(0).key()).versionId(versionsOf(org).get(0).versionId()));
-        assertEquals(ObjectLockMode.COMPLIANCE, retention.retention().mode());
+        assertEquals(ObjectLockRetentionMode.COMPLIANCE, retention.retention().mode());
     }
 
     @Test
