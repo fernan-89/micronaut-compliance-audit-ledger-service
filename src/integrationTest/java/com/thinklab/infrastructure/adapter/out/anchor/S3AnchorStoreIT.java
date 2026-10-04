@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The object-lock anchor store against a real S3-compatible server (MinIO), ADR-035: anchors written and read back in order, signed
+ * The object-lock anchor store against an S3-compatible server (LocalStack, which enforces Object Lock like S3 does), ADR-035: anchors written and read back in order, signed
  * under a named key, and - the point of the store - NOT removable: deleting a locked version is refused, and a plain delete (which
  * on a versioned bucket only adds a delete marker that hides the object from a normal listing) does not hide the anchors from the
  * ledger.
@@ -42,25 +42,23 @@ class S3AnchorStoreIT implements TestPropertyProvider {
 
     private static final String BUCKET = "thinklab-anchors-it";
     private static final String KEY = "it-anchor-key";
-    private static final GenericContainer<?> MINIO = new GenericContainer<>(DockerImageName.parse("minio/minio:RELEASE.2024-10-13T13-34-11Z"))
-            .withCommand("server", "/data")
-            .withEnv("MINIO_ROOT_USER", "minioadmin")
-            .withEnv("MINIO_ROOT_PASSWORD", "minioadmin")
-            .withExposedPorts(9000)
-            .waitingFor(Wait.forHttp("/minio/health/ready").forPort(9000));
+    private static final GenericContainer<?> STORE = new GenericContainer<>(DockerImageName.parse("localstack/localstack:3.8.1"))
+            .withEnv("SERVICES", "s3")
+            .withExposedPorts(4566)
+            .waitingFor(Wait.forHttp("/_localstack/health").forPort(4566).forResponsePredicate(body -> body.contains("\"s3\": \"available\"") || body.contains("\"s3\": \"running\"")));
 
     @Override
     public Map<String, String> getProperties() {
-        MINIO.start();
+        STORE.start();
         return Map.ofEntries(
                 Map.entry("mongodb.uri", MongoContainerAccess.uri("ledger_anchor_s3_it")),
                 Map.entry("ledger.anchor.enabled", "true"),
                 Map.entry("ledger.anchor.sink", "s3"),
                 Map.entry("ledger.anchor.key", KEY),
-                Map.entry("ledger.anchor.s3.endpoint", "http://" + MINIO.getHost() + ":" + MINIO.getMappedPort(9000)),
+                Map.entry("ledger.anchor.s3.endpoint", "http://" + STORE.getHost() + ":" + STORE.getMappedPort(4566)),
                 Map.entry("ledger.anchor.s3.path-style", "true"),
-                Map.entry("ledger.anchor.s3.access-key", "minioadmin"),
-                Map.entry("ledger.anchor.s3.secret-key", "minioadmin"),
+                Map.entry("ledger.anchor.s3.access-key", "test"),
+                Map.entry("ledger.anchor.s3.secret-key", "test"),
                 Map.entry("ledger.anchor.s3.bucket", BUCKET),
                 Map.entry("thinklab.mongo.create-indexes", "false"));
     }
