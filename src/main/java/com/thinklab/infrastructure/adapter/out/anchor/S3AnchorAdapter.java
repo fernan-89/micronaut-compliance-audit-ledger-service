@@ -14,7 +14,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.ChecksumAlgorithm;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectVersionsResponse;
@@ -25,9 +24,12 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -95,11 +97,21 @@ public class S3AnchorAdapter implements AnchorPort {
                         .bucket(properties.getBucket())
                         .key(key)
                         .contentType("application/json")
-                        .checksumAlgorithm(ChecksumAlgorithm.SHA256)
+                        // S3 requires Content-MD5 (or a checksum) on any upload that sets a retention period; MD5 is accepted by every S3-compatible store.
+                        .contentMD5(digestBase64("MD5", body))
                         .objectLockMode(mode)
                         .objectLockRetainUntilDate(Instant.now().plus(Duration.ofDays(properties.getRetentionDays())))
                         .build(),
                 RequestBody.fromString(body, StandardCharsets.UTF_8));
+    }
+
+    /** The algorithm is a parameter only so the impossible failure path is testable. */
+    static String digestBase64(String algorithm, String body) {
+        try {
+            return Base64.getEncoder().encodeToString(MessageDigest.getInstance(algorithm).digest(body.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(algorithm + " is required by the JVM specification.", e);
+        }
     }
 
     private List<Anchor> readAll(UUID organisationId) {

@@ -68,7 +68,7 @@ class S3AnchorAdapterTest {
 
     @Test
     @DisplayName("an anchor is one object under <prefix><organisation>/, locked in COMPLIANCE mode until its retention ends, with a checksum")
-    void publishesLockedObject() {
+    void publishesLockedObject() throws Exception {
         UUID org = UUID.randomUUID();
         Anchor published = signer.sign(org, 7, "cd".repeat(32), WHEN);
         Instant before = Instant.now();
@@ -82,7 +82,8 @@ class S3AnchorAdapterTest {
         assertEquals("anchors/" + org + "/00000000000000000007-" + String.format("%013d", WHEN.toEpochMilli()) + ".json", request.getValue().key());
         assertEquals(ObjectLockMode.COMPLIANCE, request.getValue().objectLockMode());
         assertTrue(request.getValue().objectLockRetainUntilDate().isAfter(before.plusSeconds(3649L * 86400)));
-        assertEquals("SHA256", request.getValue().checksumAlgorithmAsString());
+        assertEquals(24, request.getValue().contentMD5().length());
+        assertEquals(S3AnchorAdapter.digestBase64("MD5", new String(body.getValue().contentStreamProvider().newStream().readAllBytes(), StandardCharsets.UTF_8)), request.getValue().contentMD5());
         assertEquals("application/json", request.getValue().contentType());
         assertTrue(body.getValue().contentLength() > 0);
     }
@@ -187,6 +188,12 @@ class S3AnchorAdapterTest {
         properties.setMode("WORM");
         assertThrows(IllegalStateException.class, () -> new S3AnchorAdapter(s3, anchor, properties, json));
     }
+    @Test
+    @DisplayName("the Content-MD5 digest reports an unavailable algorithm as an IllegalStateException")
+    void digestFailure() {
+        assertThrows(IllegalStateException.class, () -> S3AnchorAdapter.digestBase64("NOT-AN-ALGORITHM", "x"));
+    }
+
     @Test
     @DisplayName("an anchor that cannot be serialised is not published (the failure is reported, not swallowed)")
     void unserialisableAnchor() throws Exception {
