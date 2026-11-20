@@ -23,7 +23,7 @@ public interface LedgerEntryRepository {
     /** The entry with the highest sequence of the tenant's chain, or empty for a tenant with no entries yet. */
     Mono<LedgerEntry> findLatest(UUID organisationId);
 
-    Mono<LedgerEntry> findById(UUID id);
+    Mono<LedgerEntry> findById(UUID id, UUID organisationId);
 
     /** Newest first. Every filter is optional; {@code limit} is applied by the store. */
     Flux<LedgerEntry> search(UUID organisationId, Filter filter, int limit);

@@ -34,6 +34,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -231,7 +232,8 @@ class LedgerPersistenceIT implements TestPropertyProvider {
         UUID org = UUID.randomUUID();
         LedgerEntryResponse written = appendOne(org, "alice", "A", "r-1");
 
-        LedgerEntry byId = repository.findById(written.id()).block();
+        LedgerEntry byId = repository.findById(written.id(), written.organisationId()).block();
+        assertNull(repository.findById(written.id(), UUID.randomUUID()).block(), "another tenant's entry is the same as none");
         LedgerEntry latest = repository.findLatest(org).block();
 
         assertEquals(written.hash(), byId.getHash());

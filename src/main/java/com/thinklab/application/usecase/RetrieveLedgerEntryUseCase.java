@@ -23,8 +23,7 @@ public class RetrieveLedgerEntryUseCase {
     }
 
     public Mono<LedgerEntryResponse> execute(UUID organisationId, UUID id) {
-        return repository.findById(id)
-                .filter(entry -> entry.getOrganisationId().equals(organisationId))
+        return repository.findById(id, organisationId)
                 .switchIfEmpty(Mono.error(new LedgerEntryNotFoundException(id)))
                 .map(LedgerEntryMapper::toResponse);
     }

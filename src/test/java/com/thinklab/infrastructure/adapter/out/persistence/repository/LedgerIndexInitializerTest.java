@@ -106,7 +106,7 @@ class LedgerIndexInitializerTest {
         when(collection.find(any(Bson.class))).thenReturn(find);
         when(find.first()).thenReturn(Mono.empty());
 
-        new LedgerEntryMongoRepositoryAdapter(client, "mongodb://mongo:27017").findById(UUID.randomUUID()).block();
+        new LedgerEntryMongoRepositoryAdapter(client, "mongodb://mongo:27017").findById(UUID.randomUUID(), UUID.randomUUID()).block();
 
         verify(client).getDatabase("thinklab_compliance_audit_ledger_db");
         assertThrows(NullPointerException.class, () -> new LedgerEntryMongoRepositoryAdapter(client, null));
