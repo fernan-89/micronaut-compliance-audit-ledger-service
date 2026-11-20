@@ -204,13 +204,15 @@ class LedgerUseCasesTest {
     @DisplayName("Retrieve: returns the entry of the caller's tenant; another tenant's entry or a missing one is a 404")
     void retrieveOne() {
         LedgerEntry entry = head(1);
-        when(repository.findById(entry.getId())).thenReturn(Mono.just(entry));
+        when(repository.findById(entry.getId(), organisationId)).thenReturn(Mono.just(entry));
+        UUID foreign = UUID.randomUUID();
+        when(repository.findById(entry.getId(), foreign)).thenReturn(Mono.empty());
         UUID missing = UUID.randomUUID();
-        when(repository.findById(missing)).thenReturn(Mono.empty());
+        when(repository.findById(missing, organisationId)).thenReturn(Mono.empty());
         RetrieveLedgerEntryUseCase useCase = new RetrieveLedgerEntryUseCase(repository);
 
         StepVerifier.create(useCase.execute(organisationId, entry.getId())).assertNext(r -> assertEquals(entry.getHash(), r.hash())).verifyComplete();
-        StepVerifier.create(useCase.execute(UUID.randomUUID(), entry.getId())).expectError(LedgerEntryNotFoundException.class).verify();
+        StepVerifier.create(useCase.execute(foreign, entry.getId())).expectError(LedgerEntryNotFoundException.class).verify();
         StepVerifier.create(useCase.execute(organisationId, missing)).expectError(LedgerEntryNotFoundException.class).verify();
     }
 

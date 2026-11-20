@@ -154,8 +154,8 @@ class LedgerEntryMongoRepositoryAdapterTest {
         when(mongoCollection.find(any(Bson.class))).thenReturn(publisher);
         when(publisher.first()).thenReturn(Mono.just(LedgerPersistenceMapper.toDocument(entry))).thenReturn(Mono.empty());
 
-        StepVerifier.create(adapter.findById(entry.getId())).expectNextMatches(e -> e.getId().equals(entry.getId())).verifyComplete();
-        StepVerifier.create(adapter.findById(entry.getId())).verifyComplete();
+        StepVerifier.create(adapter.findById(entry.getId(), entry.getOrganisationId())).expectNextMatches(e -> e.getId().equals(entry.getId())).verifyComplete();
+        StepVerifier.create(adapter.findById(entry.getId(), entry.getOrganisationId())).verifyComplete();
     }
 
     @Test

@@ -73,8 +73,8 @@ public class LedgerEntryMongoRepositoryAdapter implements LedgerEntryRepository 
     }
 
     @Override
-    public Mono<LedgerEntry> findById(UUID id) {
-        return Mono.from(getCollection().find(Filters.eq(FIELD_ID, id)).first()).map(LedgerPersistenceMapper::toDomain);
+    public Mono<LedgerEntry> findById(UUID id, UUID organisationId) {
+        return Mono.from(getCollection().find(Filters.and(Filters.eq(FIELD_ID, id), Filters.eq("organisationId", organisationId))).first()).map(LedgerPersistenceMapper::toDomain);
     }
 
     @Override
